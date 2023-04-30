@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Model Tester</title>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+  </head>
+  <body>
+    <h1>Model Tester</h1>
+    <input type="file" id="model-file-input" accept=".pth">
+    <button id="test-button">Test Model</button>
+    <div id="result"></div>
+
+    <script>
+      const modelFileInput = document.getElementById('model-file-input');
+      const testButton = document.getElementById('test-button');
+      const resultDiv = document.getElementById('result');
+
+      testButton.addEventListener('click', async () => {
+        const file = modelFileInput.files[0];
+        if (!file) {
+          alert('Please select a model file');
+          return;
+        }
+
+        const formData = new FormData();
+        formData.append('model', file);
+
+        try {
+          const response = await axios.post('/test-model', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          });
+          const accuracy = response.data.accuracy;
+          resultDiv.textContent = `Accuracy: ${accuracy}%`;
+        } catch (error) {
+          console.error(error);
+          resultDiv.textContent = 'Error occurred while testing the model';
+        }
+      });
+    </script>
+  </body>
+</html>
