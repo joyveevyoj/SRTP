@@ -2,22 +2,28 @@
 from flask import Flask, request, send_file
 from werkzeug.utils import secure_filename
 import torch
-import torch
 import torchvision
 import torch.nn as nn
 from torchvision import datasets, transforms
 import threading
 from queue import Queue
-
+import torch.nn.functional as F
+import torch.optim as optim
+import numpy as np
+import matplotlib.pyplot as plt
+from art.attacks.evasion import FastGradientMethod
+from art.attacks.evasion import DeepFool
+from art.estimators.classification import PyTorchClassifier
+from art.utils import load_mnist
+import random
 app = Flask(__name__)
-
 @app.route('/')
 def index():
-    return send_file('test_model.html')
-
-@app.route('/test-model', methods=['POST'])
-def test_model():
-    q = Queue()
+    filename = 'test_model.html'
+    cache_timeout = 0 if app.debug else 3600  # set cache timeout to 0 when in debug mode
+    return send_file(filename, cache_timeout=cache_timeout, last_modified=True, add_etags=True, mimetype='text/html')
+@app.route('/load-model', methods=['POST'])
+def load_model():
     # check if the post request has the file part
     if 'model' not in request.files:
         return 'No model file uploaded'
@@ -34,24 +40,20 @@ def test_model():
 
     # load the model file and perform testing in a separate thread
     model_file = 'uploads/' + filename
-    t = threading.Thread(target=test, args=(model_file,q))
+    t = threading.Thread(target=load, args=(model_file,))
     t.start()
     # wait for the thread to finish and get the result from the queue
-    accuracy = q.get()
-    return {'accuracy': accuracy*100}
+    return "fileuploaded"
 
-def test(model_file,q):
-    # load the test set
-    transform = transforms.Compose([
-    transforms.ToTensor(),
-    transforms.Normalize((0.1307,), (0.3081,))
-    ])
-    testset = datasets.MNIST('data', train=False, transform=transform, download=True)
-
-    # create a data loader for the test set
-    testloader = torch.utils.data.DataLoader(testset, batch_size=64, shuffle=False)
-
-    # load the model
+def load (model_file):
+    #  Load the MNIST dataset
+    global  x_train, y_train, x_test, y_test
+    (x_train, y_train), (x_test, y_test), min_pixel_value, max_pixel_value = load_mnist()
+    #  Swap axes to PyTorch's NCHW format
+    x_train = np.transpose(x_train, (0, 3, 1, 2)).astype(np.float32)
+    x_test = np.transpose(x_test, (0, 3, 1, 2)).astype(np.float32)
+    # Create and load the model
+    state_dict = torch.load(model_file)
     class Net(nn.Module):
         def __init__(self):
             super(Net, self).__init__()
@@ -67,36 +69,43 @@ def test(model_file,q):
             x = nn.functional.relu(self.fc1(x))
             x = self.fc2(x)
             return nn.functional.log_softmax(x, dim=1)
+    global classifier
+    model = Net()
+    model.load_state_dict(state_dict)
+    #  Define the loss function and the optimizer
 
-    model= Net()
-    model.load_state_dict(torch.load(model_file))
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.Adam(model.parameters(), lr=0.01)
 
-    # set the model to evaluation mode
-    model.eval()
+    # Create the ART classifier
 
-    # define a variable to keep track of the number of correct predictions
-    correct = 0
+    classifier = PyTorchClassifier(
+        model=model,
+        clip_values=(min_pixel_value, max_pixel_value),
+        loss=criterion,
+        optimizer=optimizer,
+        input_shape=(1, 28, 28),
+        nb_classes=10,
+    )
+   
 
-    # define a variable to keep track of the total number of predictions
-    total = 0
+@app.route('/test-origin', methods=['POST'])
+def test_model():
+    q = Queue()
+    t = threading.Thread(target=test_orig, args=(classifier,x_test, y_test, q))
+    t.start()
+    # wait for the thread to finish and get the result from the queue
+    accuracy = q.get()
+    return {'accuracy': accuracy*100}
 
-    # loop over the test set
-    for images, labels in testloader:
-        # make predictions on the batch of images
-        outputs = model(images)
-        # get the predicted class for each image
-        _, predicted = torch.max(outputs.data, 1)
-        # update the correct predictions count
-        correct += (predicted == labels).sum().item()
-        # update the total predictions count
-        total += labels.size(0)
+def  test_orig(classifier,x_test, y_test, q):
+     # Evaluate the ART classifier on benign test examples
 
-    # calculate the accuracy
-    accuracy = correct / total
-
-    # print the accuracy
-    print(f'Accuracy: {accuracy}')
+    predictions = classifier.predict(x_test)
+    accuracy = np.sum(np.argmax(predictions, axis=1) == np.argmax(y_test, axis=1)) / len(y_test)
+    print("Accuracy on benign test examples: {}%".format(accuracy * 100))
     q.put(accuracy)
 
+    
 if __name__ == '__main__':
     app.run(debug=True)
