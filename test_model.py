@@ -106,6 +106,24 @@ def  test_orig(classifier,x_test, y_test, q):
     print("Accuracy on benign test examples: {}%".format(accuracy * 100))
     q.put(accuracy)
 
+@app.route('/test-adversarial-fgm', methods=['POST'])
+def test_adv_fgm_main():
+    q = Queue()
+    t = threading.Thread(target=test_adv_fgm, args=(classifier,x_test, y_test, q))
+    t.start()
+    # wait for the thread to finish and get the result from the queue
+    accuracy = q.get()
+    return {'accuracy': accuracy*100}
+
+def  test_adv_fgm(classifier,x_test, y_test, q):
+     # Evaluate the ART classifier on benign test examples
+    attack_FGD = FastGradientMethod(estimator=classifier, eps=0.2)
+    x_test_adv_FGD = attack_FGD.generate(x=x_test)
+    predictions = classifier.predict(x_test_adv_FGD)
+    accuracy = np.sum(np.argmax(predictions, axis=1) == np.argmax(y_test, axis=1)) / len(y_test)
+    print("Accuracy on adversarial test examples FGD: {}%".format(accuracy * 100))
+    q.put(accuracy)
+
     
 if __name__ == '__main__':
     app.run(debug=True)

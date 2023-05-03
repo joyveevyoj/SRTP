@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!-- <!DOCTYPE html>
 <html>
   <head>
     <title>Model Tester</title>
@@ -58,4 +58,83 @@
       });
     </script>
   </body>
-  </html>     
+  </html>      -->
+  <!DOCTYPE html>
+  <html>
+    <head>
+      <title>Model Tester</title>
+      <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    </head>
+    <body>
+      <h1>Model Tester</h1>
+      <input type="file" id="model-file-input" accept=".pth">
+      <button id="upload-model-button">Upload your model file</button>
+      <button id="test-origin-button" disabled>Test original accuracy</button>
+      <button id="test-adv-fgm-accuracy-button" disabled>Test adversarial FGM accuracy</button>
+      <div id="result"></div>
+      <script>
+        const modelFileInput = document.getElementById('model-file-input');
+        const uploadModelButton = document.getElementById('upload-model-button');
+        const testOriginButton = document.getElementById('test-origin-button');
+        const testAdvFgmAccuracyButton = document.getElementById('test-adv-fgm-accuracy-button');
+        const resultDiv = document.getElementById('result');
+        let model;
+
+  uploadModelButton.addEventListener('click', async () => {
+    const file = modelFileInput.files[0];
+    if (!file) {
+      alert('Please select a model file');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('model', file);
+
+    try {
+      const response = await axios.post('/load-model', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      model = response.data;
+      testOriginButton.disabled = false;
+      testAdvFgmAccuracyButton.disabled = false; // enable the button to test adversarial accuracy
+      alert('Model uploaded successfully!');
+    } catch (error) {
+      console.error(error);
+      resultDiv.textContent = 'Error occurred while uploading the model';
+    }
+  });
+
+  testOriginButton.addEventListener('click', async () => {
+    if (!model) {
+      alert('Please upload a model first');
+      return;
+    }
+
+    try {
+      const response = await axios.post('/test-origin', { model });
+      const accuracy = response.data.accuracy;
+      resultDiv.textContent = `Accuracy: ${accuracy}%`;
+    } catch (error) {
+      console.error(error);
+      resultDiv.textContent = 'Error occurred while testing the model';
+    }
+  });
+
+  testAdvFgmAccuracyButton.addEventListener('click', async () => {
+    if (!model) {
+      alert('Please upload a model first');
+      return;
+    }
+
+    try {
+      const response = await axios.post('/test-adversarial-fgm', { model });
+      const accuracy = response.data.accuracy;
+      resultDiv.textContent = `Adversarial FGM Accuracy: ${accuracy}%`;
+    } catch (error) {
+      console.error(error);
+      resultDiv.textContent = 'Error occurred while testing the adversarial FGM accuracy';
+    }
+  });
+</script>
+</body>
+</html>
