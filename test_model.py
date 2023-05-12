@@ -150,63 +150,12 @@ def test_adv_fgm_main():
 def  test_adv_fgm(classifier,x_test, y_test, q):
      # Evaluate the ART classifier on benign test examples
     attack_FGD = FastGradientMethod(estimator=classifier, eps=0.2)
+    global x_test_adv_FGD
     x_test_adv_FGD = attack_FGD.generate(x=x_test)
     predictions = classifier.predict(x_test_adv_FGD)
     accuracy = np.sum(np.argmax(predictions, axis=1) == np.argmax(y_test, axis=1)) / len(y_test)
     print("Accuracy on adversarial test examples FGD: {}%".format(accuracy * 100))
     q.put(accuracy)
-
-# @app.route('/explain-shap', methods=['GET'])
-# def get_image():
-#     # Create a numpy array image (e.g., a black square)
-#     q = Queue()
-#     t = threading.Thread(target=get_shap_explanations, args=(x_test,model, q))
-#     t.start()
-#     # wait for the thread to finish and get the result from the queue
-#     image = q.get()
-#     # image = np.zeros((100, 100, 3), dtype=np.uint8)
-#     # Convert the numpy array to a base64-encoded string
-#     image_base64 = image_to_base64(image)
-#     # Return the image as a JSON response
-#     return jsonify({'image': image_base64})
-# def image_to_base64(image):
-#     import base64
-#     from PIL import Image
-#     import io
-#     # Convert the numpy array to a PIL Image
-#     pil_image = Image.fromarray(image)
-#     # Create an in-memory byte stream
-#     byte_stream = io.BytesIO()
-#     # Save the PIL Image to the byte stream in PNG format
-#     pil_image.save(byte_stream, format='PNG')
-#     # Encode the byte stream as base64
-#     base64_string = base64.b64encode(byte_stream.getvalue()).decode('utf-8')
-#     return base64_string
-# def get_shap_explanations(x_test, model, q):
-#     x_testtensor = torch.from_numpy(x_test)
-#     background = x_testtensor[:100]
-#     test_images = x_testtensor[:5]
-#     pred_list=[]
-#     with torch.no_grad():
-#         outputs = model(test_images)
-#         _, predicted = torch.max(outputs.data, 1)
-#         pred_list.append(predicted)
-#     print(pred_list)
-#     e = shap.DeepExplainer(model, background)
-#     shap_values = e.shap_values(test_images)
-#     shap_numpy = [np.swapaxes(np.swapaxes(s, 1, -1), 1, 2) for s in shap_values]
-#     test_numpy = np.swapaxes(np.swapaxes(test_images.cpu().numpy(), 1, -1), 1, 2)
-#     shap.image_plot(shap_numpy, test_numpy,show=False)
-#     # Get the image as a NumPy array
-#     def fig2data(fig):
-#         fig.canvas.draw()
-#         width, height = fig.canvas.get_width_height()
-#         image = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
-#         print(image.shape)
-#         image = image.reshape((height, width, 3))
-# #  Convert the displayed image to a NumPy array
-#     image_array = fig2data(plt.gcf())
-#     q.put(image_array)
 
 
 @app.route('/explain-shap', methods=['GET'])
@@ -246,6 +195,42 @@ def get_shap_explanations(x_test, model, q):
     test_numpy = np.swapaxes(np.swapaxes(test_images.cpu().numpy(), 1, -1), 1, 2)
     q.put((shap_numpy, test_numpy))
 
+@app.route('/explain-shap-adv', methods=['GET'])
+def get_image2():
+    q = Queue()
+    t = threading.Thread(target=get_shap_explanations_fgd, args=(x_test_adv_FGD,model, q))
+    t.start()
+
+    # wait for the thread to finish and get the result from the queue
+    shap_numpy, test_numpy = q.get()
+
+    # Use shap to plot the explanation and save the figure to a BytesIO object
+    fig = shap.image_plot(shap_numpy, test_numpy, show=False)
+    output = io.BytesIO()
+    plt.savefig(output, format='PNG')
+    plt.close(fig)  # Close the figure to free up memory
+
+    # Convert image data to base64
+    image_base64 = base64.b64encode(output.getvalue()).decode()
+
+    # Return as JSON
+    return jsonify({'image': image_base64})
+
+def get_shap_explanations_fgd(x_test_adv_FGD, model, q):
+    x_testtensor = torch.from_numpy(x_test_adv_FGD)
+    background = x_testtensor[:100]
+    test_images = x_testtensor[:5]
+    pred_list=[]
+    with torch.no_grad():
+        outputs = model(test_images)
+        _, predicted = torch.max(outputs.data, 1)
+        pred_list.append(predicted)
+    print(pred_list)
+    e = shap.DeepExplainer(model, background)
+    shap_values = e.shap_values(test_images)
+    shap_numpy = [np.swapaxes(np.swapaxes(s, 1, -1), 1, 2) for s in shap_values]
+    test_numpy = np.swapaxes(np.swapaxes(test_images.cpu().numpy(), 1, -1), 1, 2)
+    q.put((shap_numpy, test_numpy))
 
 
    
