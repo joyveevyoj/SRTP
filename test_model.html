@@ -11,13 +11,17 @@
       <button id="upload-model-button">Upload your model file</button>
       <button id="test-origin-button" disabled>Test original accuracy</button>
       <button id="test-adv-fgm-accuracy-button" disabled>Test adversarial FGM accuracy</button>
+      <button id="display-image-button">Display Image</button>
       <div id="result" style="white-space: pre;"></div>
+      <div id="image-container"></div>
       <script>
         const modelFileInput = document.getElementById('model-file-input');
         const uploadModelButton = document.getElementById('upload-model-button');
         const testOriginButton = document.getElementById('test-origin-button');
         const testAdvFgmAccuracyButton = document.getElementById('test-adv-fgm-accuracy-button');
         const resultDiv = document.getElementById('result');
+        const displayImageButton = document.getElementById('display-image-button');
+        const imageContainer = document.getElementById('image-container');
         let model;
 
   uploadModelButton.addEventListener('click', async () => {
@@ -75,6 +79,20 @@
     resultDiv.textContent += 'Error occurred while testing the adversarial FGM accuracy%'; // append the error message to existing text content
   }
 });
+displayImageButton.addEventListener('click', function () {
+            axios.get('/explain-shap')
+                .then(function (response) {
+                    const imageBase64 = response.data.image;
+                    console.log(imageBase64)
+                    const imageElement = document.createElement('img');
+                    imageElement.src = 'data:image/png;base64,' + imageBase64;
+                    console.log(imageElement)
+                    imageContainer.appendChild(imageElement);
+                })
+                .catch(function (error) {
+                    console.error(error);
+                });
+        });
 </script>
 </body>
-</html>
+</html> 
